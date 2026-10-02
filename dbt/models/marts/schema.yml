@@ -1,0 +1,138 @@
+version: 2
+
+models:
+
+  # ── fct_sales ─────────────────────────────────────────────────────────────
+  - name: fct_sales
+    description: >
+      Core fact table with one row per order. Joins to all dimension
+      tables. Clustered by year/month for efficient BI queries.
+      Grain: order_id (unique per row).
+
+    columns:
+      - name: sale_key
+        description: "Surrogate key — MD5 hash of order_id"
+        tests: [not_null, unique]
+
+      - name: order_id
+        description: "Natural key from source"
+        tests: [not_null, unique]
+
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_id
+
+      - name: product_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_products')
+              field: product_id
+
+      - name: date_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+
+      - name: order_status
+        tests:
+          - accepted_values:
+              values: [completed, returned, pending, cancelled, processing, unknown]
+
+      - name: net_amount
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+
+      - name: quantity
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+
+      - name: gross_amount
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= net_amount"
+              config:
+                where: "discount_pct > 0"
+
+  # ── dim_customers ──────────────────────────────────────────────────────────
+  - name: dim_customers
+    description: >
+      Customer dimension with RFM-based segmentation (platinum/gold/silver/bronze)
+      and churn risk scoring.
+
+    columns:
+      - name: customer_key
+        tests: [not_null, unique]
+
+      - name: customer_id
+        tests: [not_null, unique]
+
+      - name: customer_segment
+        tests:
+          - accepted_values:
+              values: [platinum, gold, silver, bronze]
+
+      - name: churn_risk
+        tests:
+          - accepted_values:
+              values: [high, medium, low]
+
+      - name: total_spend
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+
+      - name: total_orders
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+
+  # ── dim_products ──────────────────────────────────────────────────────────
+  - name: dim_products
+    description: >
+      Product dimension with revenue-based tier classification (top_100/top_500/standard)
+      and return rate metrics.
+
+    columns:
+      - name: product_key
+        tests: [not_null, unique]
+
+      - name: product_id
+        tests: [not_null, unique]
+
+      - name: revenue_tier
+        tests:
+          - accepted_values:
+              values: [top_100, top_500, standard]
+
+      - name: return_rate_pct
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "BETWEEN 0 AND 100"
+
+  # ── dim_date ──────────────────────────────────────────────────────────────
+  - name: dim_date
+    description: >
+      Calendar date dimension covering Jan 2023 – Dec 2025.
+      1,096 rows. Used as the time axis for all mart queries.
+
+    columns:
+      - name: date_key
+        tests: [not_null, unique]
+
+      - name: full_date
+        tests: [not_null, unique]
+
+      - name: quarter
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, 4]

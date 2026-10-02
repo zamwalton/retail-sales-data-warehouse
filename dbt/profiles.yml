@@ -1,0 +1,28 @@
+retail_pipeline:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: RETAIL_ENGINEER
+      database: RETAIL_DB
+      warehouse: RETAIL_WH
+      schema: STAGING
+      threads: 4
+      client_session_keep_alive: false
+      query_tag: dbt_dev
+
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: RETAIL_ENGINEER
+      database: RETAIL_DB
+      warehouse: RETAIL_WH
+      schema: MARTS
+      threads: 8
+      client_session_keep_alive: false
+      query_tag: dbt_prod

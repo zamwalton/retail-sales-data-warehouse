@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+
+# Data — never commit raw/staging data to git
+data/
+*.csv
+*.parquet
+*.json.gz
+
+# Spark
+derby.log
+metastore_db/
+spark-warehouse/
+spark_run_log.txt
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+
+# Airflow
+airflow/logs/
+airflow.db
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+
+# Secrets
+.env
+*.pem
+*.key
+credentials.json

@@ -1,0 +1,31 @@
+name: retail_pipeline
+version: "1.0.0"
+config-version: 2
+
+profile: retail_pipeline
+
+model-paths:  ["models"]
+test-paths:   ["tests"]
+macro-paths:  ["macros"]
+seed-paths:   ["seeds"]
+docs-paths:   ["docs"]
+
+target-path:  "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  retail_pipeline:
+    staging:
+      +schema:       staging
+      +materialized: view          # staging = views (cheap, always fresh)
+      +tags:         ["staging"]
+
+    marts:
+      +schema:       marts
+      +materialized: table         # marts = tables (fast for BI queries)
+      +tags:         ["marts"]
+      +post-hook:    "GRANT SELECT ON {{ this }} TO ROLE RETAIL_ANALYST"
+
+vars:
+  start_date: "2023-01-01"
+  end_date:   "2024-12-31"

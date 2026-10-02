@@ -1,0 +1,57 @@
+version: 2
+
+sources:
+  - name: raw
+    database: RETAIL_DB
+    schema: RAW
+    description: "Bronze layer — raw data landed by Spark ETL from S3"
+
+    tables:
+      - name: orders
+        description: "Raw retail orders — 1M+ rows, partitioned by year/month"
+        loaded_at_field: etl_loaded_at
+        freshness:
+          warn_after:  {count: 24, period: hour}
+          error_after: {count: 48, period: hour}
+
+        columns:
+          - name: order_id
+            description: "UUID — globally unique order identifier"
+            tests: [not_null, unique]
+
+          - name: customer_id
+            description: "Customer identifier in format C######"
+            tests:
+              - not_null
+              - relationships:
+                  to: ref('dim_customers')
+                  field: customer_id
+                  severity: warn
+
+          - name: product_id
+            description: "Product identifier in format P#####"
+            tests: [not_null]
+
+          - name: unit_price
+            description: "Price per unit in USD"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "> 0"
+
+          - name: quantity
+            description: "Number of units ordered"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "> 0"
+
+          - name: status
+            description: "Order status"
+            tests:
+              - accepted_values:
+                  values: [completed, returned, pending, cancelled, processing, unknown]
+
+          - name: order_date
+            description: "Date the order was placed"
+            tests: [not_null]
