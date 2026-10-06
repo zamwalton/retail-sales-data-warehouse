@@ -1,7 +1,7 @@
 # Retail Sales Intelligence Pipeline
 
 > End-to-end data engineering portfolio project built on the Deloitte enterprise stack.  
-> 1M+ rows · PySpark · Snowflake · dbt · Apache Airflow · Great Expectations · Docker
+> 1M+ raw rows · PySpark · AWS S3 · Snowflake · dbt · Apache Airflow · Great Expectations · Docker
 
 ---
 
@@ -43,7 +43,7 @@
 | Layer             | Tool                        | Version  |
 |-------------------|-----------------------------|----------|
 | Data Generation   | Python + Faker              | 3.11     |
-| Object Storage    | AWS S3 / LocalStack (dev)   | 3.3      |
+| Object Storage    | AWS S3                     | —        |
 | Distributed ETL   | Apache Spark (PySpark)      | 3.5.1    |
 | Data Quality      | Great Expectations          | 0.18.13  |
 | Cloud Warehouse   | Snowflake                   | —        |
@@ -83,11 +83,11 @@ retail-pipeline/
 │
 ├── airflow/
 │   └── dags/
-│       ├── retail_ingestion_dag.py   # DAG 1: ingest → S3 → Spark → GE
+│       ├── retail_ingestion_dag.py   # DAG 1: ingest → S3 → Spark → GE → Snowflake
 │       └── retail_transform_dag.py   # DAG 2: dbt staging → dims → facts
 │
 ├── tests/
-│   ├── test_data_quality.py      # Great Expectations suite (14 checks)
+│   ├── test_data_quality.py      # PySpark/S3 data quality gate (16 checks)
 │   └── test_spark_transforms.py  # pytest unit tests for PySpark logic
 │
 ├── config/
@@ -97,7 +97,7 @@ retail-pipeline/
 │   └── workflows/
 │       └── ci.yml                # CI: lint → Spark tests → dbt compile
 │
-├── docker-compose.yml            # LocalStack + Airflow + Postgres + Metabase
+├── docker-compose.yml            # Airflow + Postgres + Metabase
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -105,41 +105,43 @@ retail-pipeline/
 
 ---
 
-## Quick Start (Day 1 — Local Dev)
+## Quick Start (Local Dev)
 
 ### Prerequisites
 - Python 3.11+
 - Docker Desktop
-- Java 11+ (for Spark)
-- Snowflake free trial → https://signup.snowflake.com
+- Java 17 (used by the Airflow/Spark Docker image)
+- Snowflake account with the required database, schemas, warehouse, stage, and RAW table
 
 ### 1. Clone & setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/retail-pipeline.git
+git clone https://github.com/zamwalton/retail-pipeline.git
 cd retail-pipeline
 
-python -m venv venv && source venv/bin/activate
+python -m venv venv
+# Windows PowerShell
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
-cp .env.example .env
-# Fill in your Snowflake credentials in .env
+Copy-Item .env.example .env
+# Fill in AWS and Snowflake credentials in .env
 ```
 
 ### 2. Start infrastructure
 
 ```bash
-docker-compose up -d
+docker compose up -d
 # Services:
 #   Airflow UI  → http://localhost:8080  (admin/admin)
 #   Metabase    → http://localhost:3000
-#   LocalStack  → http://localhost:4566
+#   AWS S3       → real AWS S3 bucket
 ```
 
 ### 3. Run Day 1 pipeline
 
 ```bash
-# Generate data
+# Generate ~1M synthetic orders
 python ingestion/generate_data.py
 
 # Upload to S3
@@ -148,11 +150,11 @@ python ingestion/upload_to_s3.py
 # Spark ETL
 python spark_jobs/etl_orders.py
 
-# Data quality gate
+# Data quality gate (runs against S3 staging Parquet)
 python tests/test_data_quality.py
 ```
 
-### 4. Run Day 2 — Snowflake + dbt
+### 4. Run Snowflake + dbt
 
 ```bash
 # Setup Snowflake (run config/snowflake_setup.sql in Snowflake UI)
@@ -170,8 +172,50 @@ dbt docs generate && dbt docs serve
 ### 5. Run tests
 
 ```bash
-pytest tests/test_spark_transforms.py -v --cov=spark_jobs
+pytest tests/test_spark_transforms.py -v
 ```
+
+---
+
+## Pipeline Execution Flow
+
+The production pipeline is split into two Airflow DAGs:
+
+```text
+retail_ingestion_dag
+    │
+    ├── generate_synthetic_data
+    ├── upload_to_s3
+    ├── validate_raw_s3
+    ├── spark_etl_orders
+    ├── great_expectations_quality_gate
+    ├── log_s3_metrics
+    ├── load_snowflake_raw
+    └── trigger_transform_dag
+                 │
+                 ▼
+        retail_transform_dag
+                 │
+                 ├── dbt_install_packages
+                 ├── dbt_source_freshness
+                 ├── dbt_build_staging
+                 ├── dbt_test_staging
+                 ├── dbt_build_dimensions
+                 ├── dbt_build_fact_sales
+                 ├── dbt_test_marts
+                 ├── generate_dbt_docs
+                 └── notify_pipeline_success
+```
+
+### Current validated run
+
+- Raw input: **1,009,924 rows**
+- Spark staging output: **985,516 clean rows**
+- Data quality gate: **16/16 checks passed**
+- Snowflake RAW load: **985,516 rows / 985,516 unique orders**
+- `retail_ingestion_dag`: **SUCCESS**
+- `retail_transform_dag`: **SUCCESS**
+- Transform DAG is automatically triggered after the ingestion DAG completes successfully.
 
 ---
 
@@ -199,16 +243,16 @@ dim_products  ───┤
 ## Design Decisions
 
 **Why PySpark over Pandas?**  
-Scales to any data volume without code changes. Deloitte uses Spark for all large-scale ETL.
+The pipeline processes nearly 1M clean staging rows and uses Spark for distributed, S3-based transformation instead of relying on local-memory Pandas processing.
 
 **Why Parquet + partition by year/month?**  
-Query engines skip irrelevant partitions entirely — a date-filtered query on 1M rows reads only 1/24 of the data.
+Columnar Parquet storage reduces scan cost, while year/month partitioning lets downstream engines prune irrelevant date partitions.
 
 **Why dbt for transformations?**  
-SQL transformations are version-controlled, tested, documented, and lineage-tracked automatically. dbt is the Deloitte standard for Snowflake-based warehouses.
+SQL transformations are version-controlled, tested, and organized into staging, dimensions, and fact models for the Snowflake warehouse.
 
-**Why Great Expectations before Snowflake load?**  
-Bad data in the warehouse is worse than no data — it silently corrupts all downstream reports. GE acts as the data contract enforcement layer.
+**Why data quality before Snowflake load?**  
+The quality gate validates the Spark staging dataset before the warehouse load, blocking the pipeline when critical schema, uniqueness, range, or null checks fail.
 
 ---
 

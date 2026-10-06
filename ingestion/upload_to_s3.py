@@ -37,18 +37,18 @@ def get_s3_client():
     return boto3.client("s3", **kwargs)
 
 
+
 def ensure_bucket(s3, bucket: str) -> None:
+    """Verify that the configured S3 bucket exists and is accessible."""
     try:
         s3.head_bucket(Bucket=bucket)
-        logger.info(f"Bucket '{bucket}' already exists")
-    except ClientError:
-        s3.create_bucket(Bucket=bucket)
-        logger.success(f"Bucket '{bucket}' created")
-
-    # Create logical folder prefixes
-    for prefix in ["raw/orders/", "staging/orders/", "archive/"]:
-        s3.put_object(Bucket=bucket, Key=prefix, Body=b"")
-    logger.info("Bucket folder structure initialised")
+        logger.info(f"Bucket '{bucket}' exists and is accessible")
+    except ClientError as exc:
+        logger.error(
+            f"Cannot access S3 bucket '{bucket}'. "
+            "Check the bucket name, AWS credentials, and IAM permissions."
+        )
+        raise
 
 
 def upload_file(s3, local_path: Path, bucket: str, s3_key: str) -> None:

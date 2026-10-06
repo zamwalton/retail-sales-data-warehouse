@@ -8,13 +8,14 @@ Triggers the transform DAG after successful ingestion and data-quality checks.
 
 Pipeline:
 
-    1. Check AWS S3 source freshness
-    2. Generate synthetic source data
-    3. Upload raw data to AWS S3
+    1. Generate synthetic source data
+    2. Upload raw data to AWS S3
+    3. Validate raw data in AWS S3
     4. Run Spark ETL
     5. Run data-quality gate
     6. Log S3 metrics
-    7. Trigger transform DAG
+    7. Load Snowflake RAW layer
+    8. Trigger transform DAG
 
 Schedule:
     0 1 * * *  (01:00 UTC daily)
@@ -119,119 +120,74 @@ def get_s3_client():
 
 
 # =============================================================================
-# Task 1: Check AWS S3 Source Freshness
+# Task 1: Validate raw data in AWS S3
 # =============================================================================
 
-def check_source_freshness(**context) -> None:
+def validate_raw_s3(**context) -> None:
     """
-    Check that raw source data exists in AWS S3 and is not older
-    than 25 hours.
+    Validate that the expected raw source file was successfully
+    uploaded to AWS S3.
 
-    Expected location:
+    Checks:
+        1. Expected object exists.
+        2. Object is not empty.
+        3. Reports object size and last-modified timestamp.
 
-        s3://retail-pipeline-zam-2026/raw/orders/
+    This is an ingestion validation rather than a source-freshness
+    check because the current pipeline generates the source data
+    itself.
     """
 
     s3 = get_s3_client()
 
-    paginator = s3.get_paginator(
-        "list_objects_v2"
-    )
+    raw_key = f"{RAW_PREFIX}orders.csv"
 
-    latest_object = None
-
-    for page in paginator.paginate(
-        Bucket=S3_BUCKET,
-        Prefix=RAW_PREFIX,
-    ):
-
-        for obj in page.get(
-            "Contents",
-            [],
-        ):
-
-            # Ignore S3 folder marker objects
-            if obj["Key"].endswith("/"):
-                continue
-
-            if (
-                latest_object is None
-                or obj["LastModified"]
-                > latest_object["LastModified"]
-            ):
-                latest_object = obj
-
-    # -------------------------------------------------------------------------
-    # No files found
-    # -------------------------------------------------------------------------
-
-    if latest_object is None:
-
-        raise FileNotFoundError(
-            f"No raw files found in "
-            f"s3://{S3_BUCKET}/{RAW_PREFIX}"
+    try:
+        response = s3.head_object(
+            Bucket=S3_BUCKET,
+            Key=raw_key,
+        )
+    except ClientError as exc:
+        error_code = exc.response.get(
+            "Error",
+            {},
+        ).get(
+            "Code",
+            "",
         )
 
-    # -------------------------------------------------------------------------
-    # Calculate file age
-    # -------------------------------------------------------------------------
+        if error_code in ("404", "NoSuchKey", "NotFound"):
+            raise FileNotFoundError(
+                f"Raw source file was not found: "
+                f"s3://{S3_BUCKET}/{raw_key}"
+            ) from exc
 
-    now = datetime.now(
-        timezone.utc
+        raise
+
+    object_size = response.get(
+        "ContentLength",
+        0,
     )
 
-    age_hours = (
-        now
-        - latest_object["LastModified"]
-    ).total_seconds() / 3600
-
-    print(
-        "=" * 80
+    last_modified = response.get(
+        "LastModified",
     )
 
-    print(
-        "AWS S3 SOURCE FRESHNESS CHECK"
-    )
+    print("=" * 80)
+    print("AWS S3 RAW INGESTION VALIDATION")
+    print(f"Bucket        : {S3_BUCKET}")
+    print(f"Object        : {raw_key}")
+    print(f"Size          : {object_size:,} bytes")
+    print(f"Last modified : {last_modified}")
+    print("=" * 80)
 
-    print(
-        f"Bucket       : {S3_BUCKET}"
-    )
-
-    print(
-        f"Prefix       : {RAW_PREFIX}"
-    )
-
-    print(
-        f"Latest file  : {latest_object['Key']}"
-    )
-
-    print(
-        f"Last modified: {latest_object['LastModified']}"
-    )
-
-    print(
-        f"Age          : {age_hours:.2f} hours"
-    )
-
-    print(
-        "=" * 80
-    )
-
-    # -------------------------------------------------------------------------
-    # Freshness threshold
-    # -------------------------------------------------------------------------
-
-    if age_hours > 25:
-
+    if object_size <= 0:
         raise ValueError(
-            f"Source data is stale: "
-            f"{age_hours:.1f} hours old. "
-            f"Expected less than 25 hours."
+            f"Raw S3 object is empty: "
+            f"s3://{S3_BUCKET}/{raw_key}"
         )
 
-    print(
-        "Source freshness check PASSED."
-    )
+    print("Raw S3 ingestion validation PASSED.")
 
 
 # =============================================================================
@@ -365,17 +321,19 @@ with DAG(
 
     ## Pipeline
 
-    AWS S3 raw source
+    synthetic data generation
     ↓
-    Synthetic data generation
+    s3 upload
     ↓
-    S3 upload
+    S3 upload validation
     ↓
     Spark transformation
     ↓
     Data quality validation
     ↓
     S3 metrics
+    ↓
+    Snowflake RAW load
     ↓
     Transform DAG
 
@@ -401,14 +359,14 @@ with DAG(
 ) as dag:
 
     # =========================================================================
-    # Task 1: Check S3 Source Freshness
+    # Task 1: Validate raw data in AWS S3
     # =========================================================================
 
-    check_freshness = PythonOperator(
+    validate_raw = PythonOperator(
 
-        task_id="check_source_freshness",
+        task_id="validate_raw_s3",
 
-        python_callable=check_source_freshness,
+        python_callable=validate_raw_s3,
     )
 
 
@@ -447,6 +405,7 @@ with DAG(
         sla=timedelta(
             minutes=10
         ),
+        append_env=True,
 
         env={
             # AWS credentials are supplied by Docker/Airflow
@@ -484,6 +443,7 @@ with DAG(
         sla=timedelta(
             minutes=45
         ),
+        append_env=True,
 
         env={
             # AWS credentials
@@ -518,6 +478,7 @@ with DAG(
             "python tests/test_data_quality.py"
         ),
 
+        append_env=True,
         env={
             "AWS_ACCESS_KEY_ID": os.getenv(
                 "AWS_ACCESS_KEY_ID",
@@ -548,8 +509,25 @@ with DAG(
     )
 
 
+
+    # =============================================================================
+    # Task 7: Load Snowflake RAW layer
+    # =============================================================================
+
+    snowflake_raw_load = BashOperator(
+        task_id="load_snowflake_raw",
+        bash_command=(
+            "cd /opt && "
+            "python ingestion/load_snowflake_raw.py"
+        ),
+        sla=timedelta(
+            minutes=30
+        ),
+    )
+
+
     # =========================================================================
-    # Task 7: Trigger Transform DAG
+    # Task 8: Trigger Transform DAG
     # =========================================================================
 
     trigger_transform = TriggerDagRunOperator(
@@ -568,12 +546,14 @@ with DAG(
     # Task Dependencies
     # =========================================================================
 
+   
     (
-        check_freshness
-        >> generate_data
+        generate_data
         >> upload_s3
+        >> validate_raw
         >> spark_etl
         >> data_quality
         >> log_metrics
+        >> snowflake_raw_load
         >> trigger_transform
     )

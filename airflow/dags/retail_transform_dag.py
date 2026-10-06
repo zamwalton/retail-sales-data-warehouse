@@ -41,7 +41,7 @@ from airflow.operators.python import PythonOperator
 
 DBT_DIR = "/opt/dbt"
 
-DBT_PROFILES = "/opt/dbt/profiles.yml"
+DBT_PROFILES = "/opt/dbt"
 
 DBT_CMD_BASE = f"cd {DBT_DIR} && dbt"
 

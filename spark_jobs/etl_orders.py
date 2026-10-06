@@ -11,9 +11,11 @@ Medallion Architecture:
 Run: python spark_jobs/etl_orders.py
 """
 import os
+import sys
 
-os.environ["PYSPARK_PYTHON"] = "python"
-os.environ["PYSPARK_DRIVER_PYTHON"] = "python"
+# Use the exact Python interpreter running this script.
+os.environ["PYSPARK_PYTHON"] = sys.executable
+os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 
 import sys
 from datetime import date
@@ -39,39 +41,34 @@ VALID_CATEGORIES = {"Electronics", "Clothing", "Food & Beverage", "Sports",
 
 
 # ── Config Validation ─────────────────────────────────────────────────────────
+
 def validate_config() -> None:
-    """Fail fast with a clear message if config looks wrong, before Spark even starts."""
+    """Validate required configuration before starting Spark."""
     errors = []
 
-    if S3_BUCKET in ("retail-pipeline", ""):
+    if not S3_BUCKET or S3_BUCKET == "retail-pipeline":
         errors.append(
-            f"S3_BUCKET is '{S3_BUCKET}' — looks like the default, not your real bucket. "
-            "Check .env has S3_BUCKET set correctly and you're running from the project root."
+            f"S3_BUCKET is '{S3_BUCKET}'. "
+            "Check that .env contains the correct bucket name."
         )
 
-    key = os.getenv("AWS_ACCESS_KEY_ID", "")
+    key = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
+    secret = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
+
     if not key:
-        errors.append("AWS_ACCESS_KEY_ID is not set in .env")
-    elif len(key) != 20 or not key.startswith("AKIA"):
-        errors.append(
-            f"AWS_ACCESS_KEY_ID looks malformed (length={len(key)}, expected 20, starts with AKIA). "
-            "Check for typos or a leftover old key in .env"
-        )
-
-    secret = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+        errors.append("AWS_ACCESS_KEY_ID is not set.")
     if not secret:
-        errors.append("AWS_SECRET_ACCESS_KEY is not set in .env")
-    elif len(secret) != 40:
-        errors.append(f"AWS_SECRET_ACCESS_KEY looks malformed (length={len(secret)}, expected 40)")
+        errors.append("AWS_SECRET_ACCESS_KEY is not set.")
 
     if errors:
         logger.error("─── Config validation failed ───────────────────────")
-        for e in errors:
-            logger.error(f"  ✗ {e}")
-        logger.error("──────────────────────────────────────────────────────")
+        for error in errors:
+            logger.error(f"  ✗ {error}")
+        logger.error("────────────────────────────────────────────────────")
         raise SystemExit(1)
 
-    logger.success(f"Config OK — bucket: {S3_BUCKET}, key: {key[:6]}...{key[-4:]}")
+    # Do not log the access key or secret.
+    logger.success(f"Config OK — bucket: {S3_BUCKET}")
 
 
 # ── Spark Session ─────────────────────────────────────────────────────────────
@@ -153,9 +150,10 @@ def transform(df: DataFrame) -> DataFrame:
     df = df.dropna(subset=["order_id", "customer_id", "order_date", "unit_price", "product_id"])
 
     df = df.filter(
-        F.col("order_date").isNotNull() &
-        (F.col("unit_price") > 0) &
-        (F.col("quantity") > 0)
+    F.col("order_date").isNotNull() &
+    (F.col("unit_price") > 0) &
+    (F.col("quantity") > 0) &
+    F.col("discount_pct").between(0, 100)
     )
 
     df = (df
@@ -172,9 +170,18 @@ def transform(df: DataFrame) -> DataFrame:
     )
 
     from pyspark.sql.window import Window
-    w = Window.partitionBy("order_id").orderBy(F.col("order_date").desc())
-    df = (df
-        .withColumn("_row_num", F.row_number().over(w))
+
+    w = Window.partitionBy("order_id").orderBy(
+        F.col("order_date").desc(),
+        F.col("ship_date").desc_nulls_last(),
+        F.col("customer_id").asc(),
+        F.col("product_id").asc(),
+        F.col("unit_price").desc(),
+        F.col("quantity").desc(),
+    )
+
+    df = (
+        df.withColumn("_row_num", F.row_number().over(w))
         .filter(F.col("_row_num") == 1)
         .drop("_row_num")
     )

@@ -1,21 +1,32 @@
-version: "3.9"
+
 
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.9.1-python3.11
+  build:
+    context: .
+    dockerfile: airflow/Dockerfile
+  image: retail-airflow:2.9.1-python3.11
   environment:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
     AIRFLOW__CORE__FERNET_KEY: "46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLt0nfdstg="
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
-    AWS_ACCESS_KEY_ID: test
-    AWS_SECRET_ACCESS_KEY: test
-    AWS_DEFAULT_REGION: us-east-1
+
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    S3_BUCKET: ${S3_BUCKET:-retail-pipeline-2026}
+
     SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT}
     SNOWFLAKE_USER: ${SNOWFLAKE_USER}
     SNOWFLAKE_PASSWORD: ${SNOWFLAKE_PASSWORD}
+    SNOWFLAKE_WAREHOUSE: ${SNOWFLAKE_WAREHOUSE}
+    snowflake_database: ${SNOWFLAKE_DATABASE}
+    SNOWFLAKE_SCHEMA: ${SNOWFLAKE_SCHEMA}
   volumes:
     - ./airflow/dags:/opt/airflow/dags
+    - ./ingestion:/opt/ingestion
+    - ./data:/opt/data
     - ./spark_jobs:/opt/spark_jobs
     - ./dbt:/opt/dbt
     - ./tests:/opt/tests
@@ -25,24 +36,6 @@ x-airflow-common: &airflow-common
       condition: service_healthy
 
 services:
-  # ─── AWS S3 Mock ───────────────────────────────────────────────
-  localstack:
-    image: localstack/localstack:3.3
-    container_name: retail_localstack
-    ports:
-      - "4566:4566"
-    environment:
-      - SERVICES=s3
-      - DEFAULT_REGION=us-east-1
-      - DATA_DIR=/var/lib/localstack/data
-    volumes:
-      - localstack-data:/var/lib/localstack
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # ─── Airflow Metadata DB ───────────────────────────────────────
   postgres:
     image: postgres:15-alpine
