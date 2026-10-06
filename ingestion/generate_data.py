@@ -1,4 +1,3 @@
-
 """
 generate_data.py
 ----------------
@@ -28,11 +27,20 @@ OUTPUT_DIR = Path("data/raw")
 TARGET_ROWS = 1_000_000
 
 CATEGORIES = [
-    "Electronics", "Clothing", "Food & Beverage",
-    "Sports", "Home & Garden", "Books", "Toys",
+    "Electronics",
+    "Clothing",
+    "Food & Beverage",
+    "Sports",
+    "Home & Garden",
+    "Books",
+    "Toys",
 ]
 STATUSES = [
-    "completed", "returned", "pending", "cancelled", "processing",
+    "completed",
+    "returned",
+    "pending",
+    "cancelled",
+    "processing",
 ]
 COUNTRIES = ["IN", "US", "GB", "DE", "AU", "CA", "SG", "AE", "FR", "JP"]
 
@@ -49,10 +57,20 @@ PRODUCT_PRICE_RANGES = {
 STATUS_WEIGHTS = [0.65, 0.10, 0.12, 0.08, 0.05]
 
 FIELDNAMES = [
-    "order_id", "customer_id", "product_id", "store_id",
-    "category", "quantity", "unit_price", "discount_pct",
-    "order_date", "ship_date", "status", "country",
-    "channel", "payment",
+    "order_id",
+    "customer_id",
+    "product_id",
+    "store_id",
+    "category",
+    "quantity",
+    "unit_price",
+    "discount_pct",
+    "order_date",
+    "ship_date",
+    "status",
+    "country",
+    "channel",
+    "payment",
 ]
 
 
@@ -63,9 +81,9 @@ def random_date(
     start_date = datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     end_date = datetime.strptime(end, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     delta_days = (end_date - start_date).days
-    return (
-        start_date + timedelta(days=random.randint(0, delta_days))
-    ).strftime("%Y-%m-%d")
+    return (start_date + timedelta(days=random.randint(0, delta_days))).strftime(
+        "%Y-%m-%d"
+    )
 
 
 def make_row() -> dict:
@@ -85,23 +103,17 @@ def make_row() -> dict:
         "discount_pct": random.choice([0, 5, 10, 15, 20]),
         "order_date": random_date(),
         "ship_date": random_date("2023-01-02", "2025-01-15"),
-        "status": random.choices(
-            STATUSES, weights=STATUS_WEIGHTS, k=1
-        )[0],
+        "status": random.choices(STATUSES, weights=STATUS_WEIGHTS, k=1)[0],
         "country": random.choice(COUNTRIES),
         "channel": random.choice(["online", "in-store", "mobile"]),
-        "payment": random.choice(
-            ["credit_card", "upi", "net_banking", "cod"]
-        ),
+        "payment": random.choice(["credit_card", "upi", "net_banking", "cod"]),
     }
 
 
 def inject_noise(row: dict) -> dict:
     """Inject nulls, invalid dates, and negative prices for testing."""
     if random.random() < 0.03:
-        row[random.choice(
-            ["category", "country", "ship_date", "discount_pct"]
-        )] = None
+        row[random.choice(["category", "country", "ship_date", "discount_pct"])] = None
 
     if random.random() < 0.005:
         row["order_date"] = "9999-99-99"
@@ -135,15 +147,12 @@ def main() -> None:
                 duplicate_count += 1
 
             if (index + 1) % 100_000 == 0:
-                logger.info(
-                    f"Generated {index + 1:,}/{TARGET_ROWS:,} base rows"
-                )
+                logger.info(f"Generated {index + 1:,}/{TARGET_ROWS:,} base rows")
 
     size_mb = output_file.stat().st_size / (1024 * 1024)
 
     logger.success(
-        f"Finished: {TARGET_ROWS + duplicate_count:,} total rows "
-        f"({size_mb:.1f} MB)"
+        f"Finished: {TARGET_ROWS + duplicate_count:,} total rows " f"({size_mb:.1f} MB)"
     )
     logger.info(f"Additional duplicate rows: {duplicate_count:,}")
     logger.info("Output file: {}", output_file.resolve())

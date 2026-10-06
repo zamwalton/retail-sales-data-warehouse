@@ -18,11 +18,11 @@ from loguru import logger
 load_dotenv()
 
 # ── Config ────────────────────────────────────────────────────────────────────
-S3_ENDPOINT   = os.getenv("S3_ENDPOINT_URL", "").strip()
-AWS_KEY       = os.getenv("AWS_ACCESS_KEY_ID", "")
-AWS_SECRET    = os.getenv("AWS_SECRET_ACCESS_KEY", "")
-REGION        = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-BUCKET        = os.getenv("S3_BUCKET", "retail-pipeline-zam-2026")
+S3_ENDPOINT = os.getenv("S3_ENDPOINT_URL", "").strip()
+AWS_KEY = os.getenv("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+BUCKET = os.getenv("S3_BUCKET", "retail-pipeline-zam-2026")
 RAW_FILES_DIR = Path("data/raw")
 
 
@@ -35,7 +35,6 @@ def get_s3_client():
     if S3_ENDPOINT:
         kwargs["endpoint_url"] = S3_ENDPOINT
     return boto3.client("s3", **kwargs)
-
 
 
 def ensure_bucket(s3, bucket: str) -> None:
@@ -53,7 +52,9 @@ def ensure_bucket(s3, bucket: str) -> None:
 
 def upload_file(s3, local_path: Path, bucket: str, s3_key: str) -> None:
     file_size_mb = local_path.stat().st_size / 1024 / 1024
-    logger.info(f"Uploading {local_path.name} ({file_size_mb:.1f} MB) → s3://{bucket}/{s3_key}")
+    logger.info(
+        f"Uploading {local_path.name} ({file_size_mb:.1f} MB) → s3://{bucket}/{s3_key}"
+    )
     s3.upload_file(str(local_path), bucket, s3_key)
     logger.success(f"Upload complete: s3://{bucket}/{s3_key}")
 
@@ -63,7 +64,9 @@ def list_bucket(s3, bucket: str) -> None:
     logger.info("Bucket contents:")
     for obj in resp.get("Contents", []):
         size_mb = obj["Size"] / 1024 / 1024
-        logger.info(f"  {obj['Key']}  ({size_mb:.1f} MB)  last modified: {obj['LastModified']}")
+        logger.info(
+            f"  {obj['Key']}  ({size_mb:.1f} MB)  last modified: {obj['LastModified']}"
+        )
 
 
 def main() -> None:
@@ -72,7 +75,9 @@ def main() -> None:
 
     csv_files = list(RAW_FILES_DIR.glob("*.csv"))
     if not csv_files:
-        logger.error(f"No CSV files found in {RAW_FILES_DIR}. Run generate_data.py first.")
+        logger.error(
+            f"No CSV files found in {RAW_FILES_DIR}. Run generate_data.py first."
+        )
         raise SystemExit(1)
 
     for csv_file in csv_files:

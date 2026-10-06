@@ -16,13 +16,13 @@ from loguru import logger
 
 load_dotenv()
 
-S3_ENDPOINT   = os.getenv("S3_ENDPOINT_URL", "").strip()
-AWS_KEY       = os.getenv("AWS_ACCESS_KEY_ID", "")
-AWS_SECRET    = os.getenv("AWS_SECRET_ACCESS_KEY", "")
-REGION        = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-BUCKET        = os.getenv("S3_BUCKET", "retail-pipeline-zam-2026")
-S3_PREFIX   = "staging/orders/"
-LOCAL_DIR   = Path("data/staging/orders")
+S3_ENDPOINT = os.getenv("S3_ENDPOINT_URL", "").strip()
+AWS_KEY = os.getenv("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+BUCKET = os.getenv("S3_BUCKET", "retail-pipeline-zam-2026")
+S3_PREFIX = "staging/orders/"
+LOCAL_DIR = Path("data/staging/orders")
 
 
 def get_s3_client():
@@ -38,10 +38,12 @@ def get_s3_client():
         logger.info("Using real AWS S3 (no custom endpoint)")
     return boto3.client("s3", **kwargs)
 
+
 def main() -> None:
     s3 = get_s3_client()
     if LOCAL_DIR.exists():
         import shutil
+
         shutil.rmtree(LOCAL_DIR)
         logger.info(f"Cleared stale local directory: {LOCAL_DIR}")
 
@@ -55,7 +57,7 @@ def main() -> None:
             if key.endswith("/"):
                 continue  # skip folder markers
 
-            rel_path  = key[len(S3_PREFIX):]
+            rel_path = key[len(S3_PREFIX) :]
             local_path = LOCAL_DIR / rel_path
             local_path.parent.mkdir(parents=True, exist_ok=True)
 

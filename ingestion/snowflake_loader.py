@@ -18,12 +18,12 @@ load_dotenv()
 
 def get_connection():
     return snowflake.connector.connect(
-        account   = os.environ["SNOWFLAKE_ACCOUNT"],
-        user      = os.environ["SNOWFLAKE_USER"],
-        password  = os.environ["SNOWFLAKE_PASSWORD"],
-        warehouse = os.getenv("SNOWFLAKE_WAREHOUSE", "RETAIL_WH"),
-        database  = os.getenv("SNOWFLAKE_DATABASE",  "RETAIL_DB"),
-        schema    = os.getenv("SNOWFLAKE_SCHEMA",    "RAW"),
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        password=os.environ["SNOWFLAKE_PASSWORD"],
+        warehouse=os.getenv("SNOWFLAKE_WAREHOUSE", "RETAIL_WH"),
+        database=os.getenv("SNOWFLAKE_DATABASE", "RETAIL_DB"),
+        schema=os.getenv("SNOWFLAKE_SCHEMA", "RAW"),
     )
 
 
@@ -72,10 +72,12 @@ def run_copy_into(conn) -> dict:
     """)
 
     results = cur.fetchall()
-    total_loaded = sum(r[3] for r in results)   # rows_loaded column
-    total_errors = sum(r[4] for r in results)   # rows_errors column
+    total_loaded = sum(r[3] for r in results)  # rows_loaded column
+    total_errors = sum(r[4] for r in results)  # rows_errors column
 
-    logger.success(f"COPY INTO complete — loaded: {total_loaded:,}, errors: {total_errors:,}")
+    logger.success(
+        f"COPY INTO complete — loaded: {total_loaded:,}, errors: {total_errors:,}"
+    )
     return {"rows_loaded": total_loaded, "rows_errors": total_errors}
 
 
@@ -93,10 +95,10 @@ def verify_load(conn) -> dict:
     """)
     row = cur.fetchone()
     stats = {
-        "total_rows":       row[0],
+        "total_rows": row[0],
         "unique_customers": row[1],
-        "earliest_order":   str(row[2]),
-        "latest_order":     str(row[3]),
+        "earliest_order": str(row[2]),
+        "latest_order": str(row[3]),
         "revenue_millions": row[4],
     }
     logger.info("Load verification:")

@@ -52,34 +52,21 @@ DBT_CMD_BASE = f"cd {DBT_DIR} && dbt"
 
 default_args = {
     "owner": "data-engineering",
-
     "depends_on_past": False,
-
     "start_date": datetime(2024, 1, 1, tzinfo=timezone.utc),
-
-    "email": [
-        "data-alerts@retail.com"
-    ],
-
+    "email": ["data-alerts@retail.com"],
     "email_on_failure": True,
-
     "email_on_retry": False,
-
     "retries": 1,
-
-    "retry_delay": timedelta(
-        minutes=3
-    ),
-
-    "execution_timeout": timedelta(
-        minutes=30
-    ),
+    "retry_delay": timedelta(minutes=3),
+    "execution_timeout": timedelta(minutes=30),
 }
 
 
 # =============================================================================
 # Task Functions
 # =============================================================================
+
 
 def notify_success(**context) -> None:
     """
@@ -98,29 +85,17 @@ def notify_success(**context) -> None:
 
     execution_date = context["ds"]
 
-    print(
-        "=" * 80
-    )
+    print("=" * 80)
 
-    print(
-        "DBT TRANSFORMATION PIPELINE SUCCESS"
-    )
+    print("DBT TRANSFORMATION PIPELINE SUCCESS")
 
-    print(
-        f"DAG           : {dag}"
-    )
+    print(f"DAG           : {dag}")
 
-    print(
-        f"Execution date: {execution_date}"
-    )
+    print(f"Execution date: {execution_date}")
 
-    print(
-        "Status        : SUCCESS"
-    )
+    print("Status        : SUCCESS")
 
-    print(
-        "=" * 80
-    )
+    print("=" * 80)
 
     # In production:
     #
@@ -142,15 +117,9 @@ def generate_dbt_docs(**context) -> None:
 
     import subprocess
 
-    command = (
-        f"cd {DBT_DIR} && "
-        f"dbt docs generate "
-        f"--profiles-dir {DBT_PROFILES}"
-    )
+    command = f"cd {DBT_DIR} && " f"dbt docs generate " f"--profiles-dir {DBT_PROFILES}"
 
-    print(
-        f"Running: {command}"
-    )
+    print(f"Running: {command}")
 
     subprocess.run(
         command,
@@ -158,13 +127,9 @@ def generate_dbt_docs(**context) -> None:
         check=True,
     )
 
-    print(
-        "dbt documentation generated successfully."
-    )
+    print("dbt documentation generated successfully.")
 
-    print(
-        "Output: target/catalog.json"
-    )
+    print("Output: target/catalog.json")
 
 
 # =============================================================================
@@ -172,18 +137,12 @@ def generate_dbt_docs(**context) -> None:
 # =============================================================================
 
 with DAG(
-
     dag_id="retail_transform_dag",
-
     default_args=default_args,
-
     # Triggered by retail_ingestion_dag
     schedule_interval=None,
-
     catchup=False,
-
     max_active_runs=1,
-
     tags=[
         "retail",
         "dbt",
@@ -191,7 +150,6 @@ with DAG(
         "snowflake",
         "day2",
     ],
-
     doc_md="""
     # Retail Transform DAG
 
@@ -240,7 +198,6 @@ with DAG(
 
     `retail_ingestion_dag`
     """,
-
 ) as dag:
 
     # =========================================================================
@@ -248,75 +205,50 @@ with DAG(
     # =========================================================================
 
     dbt_deps = BashOperator(
-
         task_id="dbt_install_packages",
-
-        bash_command=(
-            f"{DBT_CMD_BASE} deps "
-            f"--profiles-dir {DBT_PROFILES}"
-        ),
+        bash_command=(f"{DBT_CMD_BASE} deps " f"--profiles-dir {DBT_PROFILES}"),
     )
-
 
     # =========================================================================
     # Task 2: Check dbt Source Freshness
     # =========================================================================
 
     dbt_freshness = BashOperator(
-
         task_id="dbt_source_freshness",
-
         bash_command=(
-            f"{DBT_CMD_BASE} source freshness "
-            f"--profiles-dir {DBT_PROFILES}"
+            f"{DBT_CMD_BASE} source freshness " f"--profiles-dir {DBT_PROFILES}"
         ),
     )
-
 
     # =========================================================================
     # Task 3: Build Staging Layer
     # =========================================================================
 
     dbt_staging = BashOperator(
-
         task_id="dbt_build_staging",
-
         bash_command=(
-            f"{DBT_CMD_BASE} run "
-            "--select staging "
-            f"--profiles-dir {DBT_PROFILES}"
+            f"{DBT_CMD_BASE} run " "--select staging " f"--profiles-dir {DBT_PROFILES}"
         ),
-
-        sla=timedelta(
-            minutes=5
-        ),
+        sla=timedelta(minutes=5),
     )
-
 
     # =========================================================================
     # Task 4: Test Staging Layer
     # =========================================================================
 
     dbt_test_staging = BashOperator(
-
         task_id="dbt_test_staging",
-
         bash_command=(
-            f"{DBT_CMD_BASE} test "
-            "--select staging "
-            f"--profiles-dir {DBT_PROFILES}"
+            f"{DBT_CMD_BASE} test " "--select staging " f"--profiles-dir {DBT_PROFILES}"
         ),
     )
-
 
     # =========================================================================
     # Task 5: Build Dimension Tables
     # =========================================================================
 
     dbt_dims = BashOperator(
-
         task_id="dbt_build_dimensions",
-
         bash_command=(
             f"{DBT_CMD_BASE} run "
             "--select "
@@ -325,72 +257,51 @@ with DAG(
             "dim_date "
             f"--profiles-dir {DBT_PROFILES}"
         ),
-
-        sla=timedelta(
-            minutes=10
-        ),
+        sla=timedelta(minutes=10),
     )
-
 
     # =========================================================================
     # Task 6: Build Fact Table
     # =========================================================================
 
     dbt_fact = BashOperator(
-
         task_id="dbt_build_fact_sales",
-
         bash_command=(
             f"{DBT_CMD_BASE} run "
             "--select fct_sales "
             f"--profiles-dir {DBT_PROFILES}"
         ),
-
-        sla=timedelta(
-            minutes=10
-        ),
+        sla=timedelta(minutes=10),
     )
-
 
     # =========================================================================
     # Task 7: Test Marts
     # =========================================================================
 
     dbt_test_marts = BashOperator(
-
         task_id="dbt_test_marts",
-
         bash_command=(
-            f"{DBT_CMD_BASE} test "
-            "--select marts "
-            f"--profiles-dir {DBT_PROFILES}"
+            f"{DBT_CMD_BASE} test " "--select marts " f"--profiles-dir {DBT_PROFILES}"
         ),
     )
-
 
     # =========================================================================
     # Task 8: Generate dbt Documentation
     # =========================================================================
 
     generate_docs = PythonOperator(
-
         task_id="generate_dbt_docs",
-
         python_callable=generate_dbt_docs,
     )
-
 
     # =========================================================================
     # Task 9: Success Notification
     # =========================================================================
 
     success_notify = PythonOperator(
-
         task_id="notify_pipeline_success",
-
         python_callable=notify_success,
     )
-
 
     # =========================================================================
     # Task Dependencies

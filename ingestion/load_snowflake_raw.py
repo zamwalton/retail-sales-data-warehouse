@@ -42,6 +42,7 @@ TEMP_TABLE = "RETAIL_DB.RAW.ORDERS_LOAD_TEMP"
 # Validation
 # =============================================================================
 
+
 def validate_configuration() -> None:
 
     required = {
@@ -50,22 +51,18 @@ def validate_configuration() -> None:
         "SNOWFLAKE_PASSWORD": SNOWFLAKE_PASSWORD,
     }
 
-    missing = [
-        name
-        for name, value in required.items()
-        if not value
-    ]
+    missing = [name for name, value in required.items() if not value]
 
     if missing:
         raise RuntimeError(
-            "Missing Snowflake environment variables: "
-            + ", ".join(missing)
+            "Missing Snowflake environment variables: " + ", ".join(missing)
         )
 
 
 # =============================================================================
 # Main
 # =============================================================================
+
 
 def main() -> None:
 
@@ -95,20 +92,16 @@ def main() -> None:
 
         print("Creating temporary load table...")
 
-        cursor.execute(
-            f"""
+        cursor.execute(f"""
             CREATE OR REPLACE TEMPORARY TABLE {TEMP_TABLE}
             LIKE {TARGET_TABLE}
-            """
-        )
+            """)
 
         # ---------------------------------------------------------------------
         # 2. Load S3 staging data into temporary table
         # ---------------------------------------------------------------------
 
-        print(
-            f"Loading S3 stage into {TEMP_TABLE}..."
-        )
+        print(f"Loading S3 stage into {TEMP_TABLE}...")
 
         copy_sql = f"""
         COPY INTO {TEMP_TABLE}
@@ -181,14 +174,12 @@ def main() -> None:
         # 3. Validate temporary load
         # ---------------------------------------------------------------------
 
-        cursor.execute(
-            f"""
+        cursor.execute(f"""
             SELECT
                 COUNT(*) AS row_count,
                 MAX(etl_loaded_at) AS latest_load
             FROM {TEMP_TABLE}
-            """
-        )
+            """)
 
         row_count, latest_load = cursor.fetchone()
 
@@ -197,9 +188,7 @@ def main() -> None:
         print(f"Temporary latest load: {latest_load}")
 
         if row_count == 0:
-            raise RuntimeError(
-                "Snowflake RAW load produced zero rows."
-            )
+            raise RuntimeError("Snowflake RAW load produced zero rows.")
 
         # ---------------------------------------------------------------------
         # 4. Replace RAW snapshot atomically
@@ -212,14 +201,11 @@ def main() -> None:
 
         try:
 
-            cursor.execute(
-                f"""
+            cursor.execute(f"""
                 TRUNCATE TABLE {TARGET_TABLE}
-                """
-            )
+                """)
 
-            cursor.execute(
-                f"""
+            cursor.execute(f"""
                 INSERT INTO {TARGET_TABLE}
                 (
                     order_id,
@@ -271,8 +257,7 @@ def main() -> None:
                     is_weekend,
                     days_to_ship
                 FROM {TEMP_TABLE}
-                """
-            )
+                """)
 
             cursor.execute("COMMIT")
 
@@ -284,15 +269,13 @@ def main() -> None:
         # 5. Final verification
         # ---------------------------------------------------------------------
 
-        cursor.execute(
-            f"""
+        cursor.execute(f"""
             SELECT
                 COUNT(*) AS total_orders,
                 COUNT(DISTINCT order_id) AS unique_orders,
                 MAX(etl_loaded_at) AS latest_load
             FROM {TARGET_TABLE}
-            """
-        )
+            """)
 
         total_orders, unique_orders, latest_load = cursor.fetchone()
 
@@ -306,9 +289,7 @@ def main() -> None:
         print("=" * 80)
 
         if total_orders != unique_orders:
-            raise RuntimeError(
-                "RAW.ORDERS contains duplicate order_id values."
-            )
+            raise RuntimeError("RAW.ORDERS contains duplicate order_id values.")
 
     finally:
 

@@ -10,6 +10,7 @@ Medallion Architecture:
 
 Run: python spark_jobs/etl_orders.py
 """
+
 import os
 import sys
 
@@ -35,17 +36,25 @@ from pyspark.sql.types import (
 )
 
 # ── Config ────────────────────────────────────────────────────────────────────
-S3_ENDPOINT   = os.getenv("S3_ENDPOINT_URL", "").strip()
-S3_BUCKET     = os.getenv("S3_BUCKET", "retail-pipeline-zam-2026")
-RAW_S3_PATH   = f"s3a://{S3_BUCKET}/raw/orders/"
+S3_ENDPOINT = os.getenv("S3_ENDPOINT_URL", "").strip()
+S3_BUCKET = os.getenv("S3_BUCKET", "retail-pipeline-zam-2026")
+RAW_S3_PATH = f"s3a://{S3_BUCKET}/raw/orders/"
 STAGE_S3_PATH = f"s3a://{S3_BUCKET}/staging/orders/"
 
-VALID_STATUSES   = {"completed", "returned", "pending", "cancelled", "processing"}
-VALID_CATEGORIES = {"Electronics", "Clothing", "Food & Beverage", "Sports",
-                    "Home & Garden", "Books", "Toys"}
+VALID_STATUSES = {"completed", "returned", "pending", "cancelled", "processing"}
+VALID_CATEGORIES = {
+    "Electronics",
+    "Clothing",
+    "Food & Beverage",
+    "Sports",
+    "Home & Garden",
+    "Books",
+    "Toys",
+}
 
 
 # ── Config Validation ─────────────────────────────────────────────────────────
+
 
 def validate_config() -> None:
     """Validate required configuration before starting Spark."""
@@ -79,14 +88,19 @@ def validate_config() -> None:
 # ── Spark Session ─────────────────────────────────────────────────────────────
 def build_spark() -> SparkSession:
     builder = (
-        SparkSession.builder
-        .appName("RetailOrdersETL")
-        .config("spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID", "test"))
-        .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY", "test"))
+        SparkSession.builder.appName("RetailOrdersETL")
+        .config(
+            "spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID", "test")
+        )
+        .config(
+            "spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY", "test")
+        )
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-        .config("spark.jars.packages",
-                "org.apache.hadoop:hadoop-aws:3.3.4,"
-                "com.amazonaws:aws-java-sdk-bundle:1.12.262")
+        .config(
+            "spark.jars.packages",
+            "org.apache.hadoop:hadoop-aws:3.3.4,"
+            "com.amazonaws:aws-java-sdk-bundle:1.12.262",
+        )
         .config("spark.sql.shuffle.partitions", "8")
         .config("spark.sql.adaptive.enabled", "true")
         .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
@@ -96,45 +110,51 @@ def build_spark() -> SparkSession:
 
     if S3_ENDPOINT:
         # LocalStack — needs custom endpoint + path-style access
-        builder = (builder
-            .config("spark.hadoop.fs.s3a.endpoint", S3_ENDPOINT)
-            .config("spark.hadoop.fs.s3a.path.style.access", "true"))
+        builder = builder.config("spark.hadoop.fs.s3a.endpoint", S3_ENDPOINT).config(
+            "spark.hadoop.fs.s3a.path.style.access", "true"
+        )
     else:
         # Real AWS S3 — virtual-hosted-style (default), no custom endpoint
-        builder = (builder
-            .config("spark.hadoop.fs.s3a.path.style.access", "false")
-            .config("spark.hadoop.fs.s3a.endpoint.region", os.getenv("AWS_DEFAULT_REGION", "us-east-1")))
+        builder = builder.config(
+            "spark.hadoop.fs.s3a.path.style.access", "false"
+        ).config(
+            "spark.hadoop.fs.s3a.endpoint.region",
+            os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+        )
 
     return builder.getOrCreate()
 
 
 # ── Schema ────────────────────────────────────────────────────────────────────
-RAW_SCHEMA = StructType([
-    StructField("order_id",     StringType()),
-    StructField("customer_id",  StringType()),
-    StructField("product_id",   StringType()),
-    StructField("store_id",     StringType()),
-    StructField("category",     StringType()),
-    StructField("quantity",     StringType()),
-    StructField("unit_price",   StringType()),
-    StructField("discount_pct", StringType()),
-    StructField("order_date",   StringType()),
-    StructField("ship_date",    StringType()),
-    StructField("status",       StringType()),
-    StructField("country",      StringType()),
-    StructField("channel",      StringType()),
-    StructField("payment",      StringType()),
-])
+RAW_SCHEMA = StructType(
+    [
+        StructField("order_id", StringType()),
+        StructField("customer_id", StringType()),
+        StructField("product_id", StringType()),
+        StructField("store_id", StringType()),
+        StructField("category", StringType()),
+        StructField("quantity", StringType()),
+        StructField("unit_price", StringType()),
+        StructField("discount_pct", StringType()),
+        StructField("order_date", StringType()),
+        StructField("ship_date", StringType()),
+        StructField("status", StringType()),
+        StructField("country", StringType()),
+        StructField("channel", StringType()),
+        StructField("payment", StringType()),
+    ]
+)
 
 
 # ── Extract ───────────────────────────────────────────────────────────────────
 def extract(spark: SparkSession, path: str) -> DataFrame:
     logger.info(f"Reading raw data from: {path}")
-    df = (spark.read
-          .option("header", "true")
-          .option("multiLine", "false")
-          .schema(RAW_SCHEMA)
-          .csv(path))
+    df = (
+        spark.read.option("header", "true")
+        .option("multiLine", "false")
+        .schema(RAW_SCHEMA)
+        .csv(path)
+    )
     raw_count = df.count()
     logger.info(f"Raw row count: {raw_count:,}")
     return df
@@ -144,25 +164,27 @@ def extract(spark: SparkSession, path: str) -> DataFrame:
 def transform(df: DataFrame) -> DataFrame:
     logger.info("Applying transformations...")
 
-    df = (df
-        .withColumn("quantity",     F.col("quantity").cast(IntegerType()))
-        .withColumn("unit_price",   F.col("unit_price").cast(DoubleType()))
+    df = (
+        df.withColumn("quantity", F.col("quantity").cast(IntegerType()))
+        .withColumn("unit_price", F.col("unit_price").cast(DoubleType()))
         .withColumn("discount_pct", F.col("discount_pct").cast(IntegerType()))
-        .withColumn("order_date",   F.to_date("order_date", "yyyy-MM-dd"))
-        .withColumn("ship_date",    F.to_date("ship_date",  "yyyy-MM-dd"))
+        .withColumn("order_date", F.to_date("order_date", "yyyy-MM-dd"))
+        .withColumn("ship_date", F.to_date("ship_date", "yyyy-MM-dd"))
     )
 
-    df = df.dropna(subset=["order_id", "customer_id", "order_date", "unit_price", "product_id"])
+    df = df.dropna(
+        subset=["order_id", "customer_id", "order_date", "unit_price", "product_id"]
+    )
 
     df = df.filter(
-    F.col("order_date").isNotNull() &
-    (F.col("unit_price") > 0) &
-    (F.col("quantity") > 0) &
-    F.col("discount_pct").between(0, 100)
+        F.col("order_date").isNotNull()
+        & (F.col("unit_price") > 0)
+        & (F.col("quantity") > 0)
+        & F.col("discount_pct").between(0, 100)
     )
 
-    df = (df
-        .withColumn("status",  F.lower(F.trim(F.col("status"))))
+    df = (
+        df.withColumn("status", F.lower(F.trim(F.col("status"))))
         .withColumn("channel", F.lower(F.trim(F.col("channel"))))
         .withColumn("payment", F.lower(F.trim(F.col("payment"))))
         .withColumn("country", F.upper(F.trim(F.col("country"))))
@@ -170,8 +192,9 @@ def transform(df: DataFrame) -> DataFrame:
 
     df = df.withColumn(
         "status",
-        F.when(F.col("status").isin(list(VALID_STATUSES)), F.col("status"))
-         .otherwise(F.lit("unknown"))
+        F.when(F.col("status").isin(list(VALID_STATUSES)), F.col("status")).otherwise(
+            F.lit("unknown")
+        ),
     )
 
     from pyspark.sql.window import Window
@@ -191,23 +214,35 @@ def transform(df: DataFrame) -> DataFrame:
         .drop("_row_num")
     )
 
-    df = (df
-        .withColumn("discount_amount",
-            F.round(F.col("unit_price") * F.col("quantity") *
-                    (F.col("discount_pct") / 100.0), 2))
-        .withColumn("gross_amount",
-            F.round(F.col("unit_price") * F.col("quantity"), 2))
-        .withColumn("net_amount",
-            F.round(F.col("unit_price") * F.col("quantity") *
-                    (1 - F.col("discount_pct") / 100.0), 2))
-        .withColumn("year",    F.year("order_date"))
-        .withColumn("month",   F.month("order_date"))
+    df = (
+        df.withColumn(
+            "discount_amount",
+            F.round(
+                F.col("unit_price")
+                * F.col("quantity")
+                * (F.col("discount_pct") / 100.0),
+                2,
+            ),
+        )
+        .withColumn("gross_amount", F.round(F.col("unit_price") * F.col("quantity"), 2))
+        .withColumn(
+            "net_amount",
+            F.round(
+                F.col("unit_price")
+                * F.col("quantity")
+                * (1 - F.col("discount_pct") / 100.0),
+                2,
+            ),
+        )
+        .withColumn("year", F.year("order_date"))
+        .withColumn("month", F.month("order_date"))
         .withColumn("quarter", F.quarter("order_date"))
         .withColumn("day_of_week", F.dayofweek("order_date"))
-        .withColumn("is_weekend",
-            F.when(F.col("day_of_week").isin([1, 7]), True).otherwise(False))
-        .withColumn("days_to_ship",
-            F.datediff(F.col("ship_date"), F.col("order_date")))
+        .withColumn(
+            "is_weekend",
+            F.when(F.col("day_of_week").isin([1, 7]), True).otherwise(False),
+        )
+        .withColumn("days_to_ship", F.datediff(F.col("ship_date"), F.col("order_date")))
         .withColumn("etl_loaded_at", F.current_timestamp())
     )
 
@@ -218,11 +253,7 @@ def transform(df: DataFrame) -> DataFrame:
 def load_to_staging(df: DataFrame, path: str) -> int:
     logger.info(f"Writing Parquet to staging: {path}")
     clean_count = df.count()
-    (df.coalesce(4)
-       .write
-       .mode("overwrite")
-       .partitionBy("year", "month")
-       .parquet(path))
+    (df.coalesce(4).write.mode("overwrite").partitionBy("year", "month").parquet(path))
     logger.success(f"Written {clean_count:,} rows to staging")
     return clean_count
 
@@ -230,21 +261,22 @@ def load_to_staging(df: DataFrame, path: str) -> int:
 # ── Load to Snowflake (optional, unused — dbt/COPY INTO handles this) ────────
 def load_to_snowflake(spark: SparkSession, df: DataFrame) -> None:
     snowflake_options = {
-        "sfURL":       f"{os.getenv('SNOWFLAKE_ACCOUNT')}.snowflakecomputing.com",
-        "sfUser":      os.getenv("SNOWFLAKE_USER"),
-        "sfPassword":  os.getenv("SNOWFLAKE_PASSWORD"),
-        "sfDatabase":  os.getenv("SNOWFLAKE_DATABASE", "RETAIL_DB"),
-        "sfSchema":    os.getenv("SNOWFLAKE_SCHEMA", "RAW"),
+        "sfURL": f"{os.getenv('SNOWFLAKE_ACCOUNT')}.snowflakecomputing.com",
+        "sfUser": os.getenv("SNOWFLAKE_USER"),
+        "sfPassword": os.getenv("SNOWFLAKE_PASSWORD"),
+        "sfDatabase": os.getenv("SNOWFLAKE_DATABASE", "RETAIL_DB"),
+        "sfSchema": os.getenv("SNOWFLAKE_SCHEMA", "RAW"),
         "sfWarehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "RETAIL_WH"),
-        "sfRole":      "SYSADMIN",
+        "sfRole": "SYSADMIN",
     }
     logger.info("Writing to Snowflake RAW.orders...")
-    (df.write
-       .format("net.snowflake.spark.snowflake")
-       .options(**snowflake_options)
-       .option("dbtable", "orders")
-       .mode("overwrite")
-       .save())
+    (
+        df.write.format("net.snowflake.spark.snowflake")
+        .options(**snowflake_options)
+        .option("dbtable", "orders")
+        .mode("overwrite")
+        .save()
+    )
     logger.success("Snowflake load complete")
 
 
@@ -255,10 +287,10 @@ def main() -> None:
     spark = build_spark()
     spark.sparkContext.setLogLevel("WARN")
 
-    raw_df   = extract(spark, RAW_S3_PATH)
+    raw_df = extract(spark, RAW_S3_PATH)
     clean_df = transform(raw_df)
 
-    raw_count   = raw_df.count()
+    raw_count = raw_df.count()
     clean_count = load_to_staging(clean_df, STAGE_S3_PATH)
 
     logger.info("─── ETL Summary ───────────────────────────────────")

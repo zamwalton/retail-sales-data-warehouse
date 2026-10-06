@@ -68,34 +68,21 @@ STAGING_PREFIX = "staging/orders/"
 
 default_args = {
     "owner": "data-engineering",
-
     "depends_on_past": False,
-
     "start_date": datetime(2024, 1, 1, tzinfo=timezone.utc),
-
-    "email": [
-        "data-alerts@retail.com"
-    ],
-
+    "email": ["data-alerts@retail.com"],
     "email_on_failure": True,
-
     "email_on_retry": False,
-
     "retries": 2,
-
-    "retry_delay": timedelta(
-        minutes=5
-    ),
-
-    "execution_timeout": timedelta(
-        minutes=90
-    ),
+    "retry_delay": timedelta(minutes=5),
+    "execution_timeout": timedelta(minutes=90),
 }
 
 
 # =============================================================================
 # Helper: Create AWS S3 Client
 # =============================================================================
+
 
 def get_s3_client():
     """
@@ -123,6 +110,7 @@ def get_s3_client():
 # =============================================================================
 # Task 1: Validate raw data in AWS S3
 # =============================================================================
+
 
 def validate_raw_s3(**context) -> None:
     """
@@ -159,8 +147,7 @@ def validate_raw_s3(**context) -> None:
 
         if error_code in ("404", "NoSuchKey", "NotFound"):
             raise FileNotFoundError(
-                f"Raw source file was not found: "
-                f"s3://{S3_BUCKET}/{raw_key}"
+                f"Raw source file was not found: " f"s3://{S3_BUCKET}/{raw_key}"
             ) from exc
 
         raise
@@ -183,10 +170,7 @@ def validate_raw_s3(**context) -> None:
     print("=" * 80)
 
     if object_size <= 0:
-        raise ValueError(
-            f"Raw S3 object is empty: "
-            f"s3://{S3_BUCKET}/{raw_key}"
-        )
+        raise ValueError(f"Raw S3 object is empty: " f"s3://{S3_BUCKET}/{raw_key}")
 
     print("Raw S3 ingestion validation PASSED.")
 
@@ -194,6 +178,7 @@ def validate_raw_s3(**context) -> None:
 # =============================================================================
 # Task 2: Count S3 Objects
 # =============================================================================
+
 
 def count_s3_objects(
     s3,
@@ -208,9 +193,7 @@ def count_s3_objects(
 
     count = 0
 
-    paginator = s3.get_paginator(
-        "list_objects_v2"
-    )
+    paginator = s3.get_paginator("list_objects_v2")
 
     for page in paginator.paginate(
         Bucket=S3_BUCKET,
@@ -232,6 +215,7 @@ def count_s3_objects(
 # Task 3: Log S3 Metrics
 # =============================================================================
 
+
 def log_s3_metrics(**context) -> dict:
     """
     Log raw and staging S3 object counts.
@@ -251,29 +235,17 @@ def log_s3_metrics(**context) -> dict:
         STAGING_PREFIX,
     )
 
-    print(
-        "=" * 80
-    )
+    print("=" * 80)
 
-    print(
-        "AWS S3 PIPELINE METRICS"
-    )
+    print("AWS S3 PIPELINE METRICS")
 
-    print(
-        f"Bucket           : {S3_BUCKET}"
-    )
+    print(f"Bucket           : {S3_BUCKET}")
 
-    print(
-        f"Raw objects      : {raw_count:,}"
-    )
+    print(f"Raw objects      : {raw_count:,}")
 
-    print(
-        f"Staging objects  : {staging_count:,}"
-    )
+    print(f"Staging objects  : {staging_count:,}")
 
-    print(
-        "=" * 80
-    )
+    print("=" * 80)
 
     metrics = {
         "bucket": S3_BUCKET,
@@ -281,9 +253,7 @@ def log_s3_metrics(**context) -> dict:
         "staging_objects": staging_count,
     }
 
-    context[
-        "task_instance"
-    ].xcom_push(
+    context["task_instance"].xcom_push(
         key="s3_metrics",
         value=metrics,
     )
@@ -296,17 +266,11 @@ def log_s3_metrics(**context) -> dict:
 # =============================================================================
 
 with DAG(
-
     dag_id="retail_ingestion_dag",
-
     default_args=default_args,
-
     schedule_interval="0 1 * * *",
-
     catchup=False,
-
     max_active_runs=1,
-
     tags=[
         "retail",
         "ingestion",
@@ -314,7 +278,6 @@ with DAG(
         "s3",
         "spark",
     ],
-
     doc_md="""
     # Retail Ingestion DAG
 
@@ -356,7 +319,6 @@ with DAG(
 
     Daily at 01:00 UTC.
     """,
-
 ) as dag:
 
     # =========================================================================
@@ -364,152 +326,100 @@ with DAG(
     # =========================================================================
 
     validate_raw = PythonOperator(
-
         task_id="validate_raw_s3",
-
         python_callable=validate_raw_s3,
     )
-
 
     # =========================================================================
     # Task 2: Generate Synthetic Data
     # =========================================================================
 
     generate_data = BashOperator(
-
         task_id="generate_synthetic_data",
-
-        bash_command=(
-            "cd /opt && "
-            "python ingestion/generate_data.py"
-        ),
-
-        sla=timedelta(
-            minutes=20
-        ),
+        bash_command=("cd /opt && " "python ingestion/generate_data.py"),
+        sla=timedelta(minutes=20),
     )
-
 
     # =========================================================================
     # Task 3: Upload Raw Data to AWS S3
     # =========================================================================
 
     upload_s3 = BashOperator(
-
         task_id="upload_to_s3",
-
-        bash_command=(
-            "cd /opt && "
-            "python ingestion/upload_to_s3.py"
-        ),
-
-        sla=timedelta(
-            minutes=10
-        ),
+        bash_command=("cd /opt && " "python ingestion/upload_to_s3.py"),
+        sla=timedelta(minutes=10),
         append_env=True,
-
         env={
             # AWS credentials are supplied by Docker/Airflow
             "AWS_ACCESS_KEY_ID": os.getenv(
                 "AWS_ACCESS_KEY_ID",
                 "",
             ),
-
             "AWS_SECRET_ACCESS_KEY": os.getenv(
                 "AWS_SECRET_ACCESS_KEY",
                 "",
             ),
-
             "AWS_DEFAULT_REGION": AWS_REGION,
-
             # Bucket used by upload_to_s3.py
             "S3_BUCKET": S3_BUCKET,
         },
     )
-
 
     # =========================================================================
     # Task 4: Run Spark ETL
     # =========================================================================
 
     spark_etl = BashOperator(
-
         task_id="spark_etl_orders",
-
-        bash_command=(
-            "cd /opt && "
-            "python spark_jobs/etl_orders.py"
-        ),
-
-        sla=timedelta(
-            minutes=45
-        ),
+        bash_command=("cd /opt && " "python spark_jobs/etl_orders.py"),
+        sla=timedelta(minutes=45),
         append_env=True,
-
         env={
             # AWS credentials
             "AWS_ACCESS_KEY_ID": os.getenv(
                 "AWS_ACCESS_KEY_ID",
                 "",
             ),
-
             "AWS_SECRET_ACCESS_KEY": os.getenv(
                 "AWS_SECRET_ACCESS_KEY",
                 "",
             ),
-
             "AWS_DEFAULT_REGION": AWS_REGION,
-
             # Bucket used by Spark
             "S3_BUCKET": S3_BUCKET,
         },
     )
-
 
     # =========================================================================
     # Task 5: Data Quality Gate
     # =========================================================================
 
     data_quality = BashOperator(
-
         task_id="great_expectations_quality_gate",
-
-        bash_command=(
-            "cd /opt && "
-            "python tests/test_data_quality.py"
-        ),
-
+        bash_command=("cd /opt && " "python tests/test_data_quality.py"),
         append_env=True,
         env={
             "AWS_ACCESS_KEY_ID": os.getenv(
                 "AWS_ACCESS_KEY_ID",
                 "",
             ),
-
             "AWS_SECRET_ACCESS_KEY": os.getenv(
                 "AWS_SECRET_ACCESS_KEY",
                 "",
             ),
-
             "AWS_DEFAULT_REGION": AWS_REGION,
-
             "S3_BUCKET": S3_BUCKET,
         },
     )
-
 
     # =========================================================================
     # Task 6: Log S3 Metrics
     # =========================================================================
 
     log_metrics = PythonOperator(
-
         task_id="log_s3_metrics",
-
         python_callable=log_s3_metrics,
     )
-
-
 
     # =============================================================================
     # Task 7: Load Snowflake RAW layer
@@ -517,37 +427,25 @@ with DAG(
 
     snowflake_raw_load = BashOperator(
         task_id="load_snowflake_raw",
-        bash_command=(
-            "cd /opt && "
-            "python ingestion/load_snowflake_raw.py"
-        ),
-        sla=timedelta(
-            minutes=30
-        ),
+        bash_command=("cd /opt && " "python ingestion/load_snowflake_raw.py"),
+        sla=timedelta(minutes=30),
     )
-
 
     # =========================================================================
     # Task 8: Trigger Transform DAG
     # =========================================================================
 
     trigger_transform = TriggerDagRunOperator(
-
         task_id="trigger_transform_dag",
-
         trigger_dag_id="retail_transform_dag",
-
         wait_for_completion=False,
-
         trigger_rule=TriggerRule.ALL_SUCCESS,
     )
-
 
     # =========================================================================
     # Task Dependencies
     # =========================================================================
 
-   
     (
         generate_data
         >> upload_s3
