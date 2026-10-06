@@ -18,15 +18,20 @@ os.environ["PYSPARK_PYTHON"] = sys.executable
 os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 
 import sys
-from datetime import date
+
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from loguru import logger
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
-    DateType, DoubleType, IntegerType, StringType, StructField, StructType,
+    DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
 )
 
 # ── Config ────────────────────────────────────────────────────────────────────

@@ -28,12 +28,12 @@ SLA:
     30 minutes
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 
+from airflow import DAG
 
 # =============================================================================
 # Configuration
@@ -55,7 +55,7 @@ default_args = {
 
     "depends_on_past": False,
 
-    "start_date": datetime(2024, 1, 1),
+    "start_date": datetime(2024, 1, 1, tzinfo=timezone.utc),
 
     "email": [
         "data-alerts@retail.com"
@@ -94,9 +94,6 @@ def notify_success(**context) -> None:
         - PagerDuty
         - Airflow notification service
     """
-
-    ti = context["task_instance"]
-
     dag = context["dag"].dag_id
 
     execution_date = context["ds"]

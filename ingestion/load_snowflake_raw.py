@@ -14,8 +14,8 @@ Flow:
 """
 
 import os
-import snowflake.connector
 
+import snowflake.connector
 
 # =============================================================================
 # Configuration

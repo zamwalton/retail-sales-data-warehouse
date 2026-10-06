@@ -33,15 +33,16 @@ Staging:
     s3://retail-pipeline-zam-2026/staging/orders/
 """
 
-from datetime import datetime, timedelta, timezone
 import os
+from datetime import datetime, timedelta, timezone
 
-from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.utils.trigger_rule import TriggerRule
+from botocore.exceptions import ClientError
 
+from airflow import DAG
 
 # =============================================================================
 # Configuration
@@ -70,7 +71,7 @@ default_args = {
 
     "depends_on_past": False,
 
-    "start_date": datetime(2024, 1, 1),
+    "start_date": datetime(2024, 1, 1, tzinfo=timezone.utc),
 
     "email": [
         "data-alerts@retail.com"

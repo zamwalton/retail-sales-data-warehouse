@@ -8,12 +8,12 @@ Run: pytest tests/test_spark_transforms.py -v
 """
 
 import pytest
-from chispa import assert_df_equality
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
-    BooleanType, DateType, DoubleType, IntegerType,
-    StringType, StructField, StructType, TimestampType,
+    StringType,
+    StructField,
+    StructType,
 )
 
 from spark_jobs.etl_orders import transform

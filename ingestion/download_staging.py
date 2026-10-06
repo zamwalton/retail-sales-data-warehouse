@@ -11,9 +11,8 @@ import os
 from pathlib import Path
 
 import boto3
-from loguru import logger
-
 from dotenv import load_dotenv
+from loguru import logger
 
 load_dotenv()
 

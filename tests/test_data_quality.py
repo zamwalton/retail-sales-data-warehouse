@@ -15,7 +15,8 @@ import os
 import sys
 
 from loguru import logger
-from pyspark.sql import SparkSession, functions as F
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 
 S3_BUCKET = os.getenv("S3_BUCKET", "retail-pipeline-zam-2026")
 STAGING_PATH = f"s3a://{S3_BUCKET}/staging/orders/"
@@ -286,7 +287,7 @@ def main():
             sys.exit(1)
 
         logger.success("Data quality validation complete")
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.exception("Data quality gate encountered an error")
         sys.exit(1)
     finally:

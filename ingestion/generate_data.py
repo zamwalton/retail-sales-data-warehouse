@@ -13,12 +13,11 @@ Run: python ingestion/generate_data.py
 import csv
 import random
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from faker import Faker
 from loguru import logger
-
 
 # Configuration
 random.seed(42)
@@ -61,8 +60,8 @@ def random_date(
     start: str = "2023-01-01",
     end: str = "2024-12-31",
 ) -> str:
-    start_date = datetime.strptime(start, "%Y-%m-%d")
-    end_date = datetime.strptime(end, "%Y-%m-%d")
+    start_date = datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    end_date = datetime.strptime(end, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     delta_days = (end_date - start_date).days
     return (
         start_date + timedelta(days=random.randint(0, delta_days))

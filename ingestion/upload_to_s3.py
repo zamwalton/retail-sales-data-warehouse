@@ -43,7 +43,7 @@ def ensure_bucket(s3, bucket: str) -> None:
     try:
         s3.head_bucket(Bucket=bucket)
         logger.info(f"Bucket '{bucket}' exists and is accessible")
-    except ClientError as exc:
+    except ClientError:
         logger.error(
             f"Cannot access S3 bucket '{bucket}'. "
             "Check the bucket name, AWS credentials, and IAM permissions."

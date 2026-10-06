@@ -8,7 +8,6 @@ Run: python ingestion/snowflake_loader.py
 """
 
 import os
-from datetime import datetime
 
 import snowflake.connector
 from dotenv import load_dotenv
