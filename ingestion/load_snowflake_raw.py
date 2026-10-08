@@ -14,6 +14,7 @@ Flow:
 """
 
 import os
+import re
 
 import snowflake.connector
 
@@ -37,14 +38,22 @@ SNOWFLAKE_STAGE = os.getenv(
 TARGET_TABLE = "RETAIL_DB.RAW.ORDERS"
 TEMP_TABLE = "RETAIL_DB.RAW.ORDERS_LOAD_TEMP"
 
+IDENTIFIER_PATTERN = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_$]*(\.[A-Za-z_][A-Za-z0-9_$]*)*$"
+)
+
 
 # =============================================================================
 # Validation
 # =============================================================================
 
 
-def validate_configuration() -> None:
+def validate_identifier(name: str, value: str) -> None:
+    if not IDENTIFIER_PATTERN.fullmatch(value):
+        raise ValueError(f"Invalid {name}: {value!r}")
 
+
+def validate_configuration() -> None:
     required = {
         "SNOWFLAKE_ACCOUNT": SNOWFLAKE_ACCOUNT,
         "SNOWFLAKE_USER": SNOWFLAKE_USER,
@@ -58,6 +67,10 @@ def validate_configuration() -> None:
             "Missing Snowflake environment variables: " + ", ".join(missing)
         )
 
+    validate_identifier("SNOWFLAKE_STAGE", SNOWFLAKE_STAGE)
+    validate_identifier("TARGET_TABLE", TARGET_TABLE)
+    validate_identifier("TEMP_TABLE", TEMP_TABLE)
+
 
 # =============================================================================
 # Main
@@ -65,7 +78,6 @@ def validate_configuration() -> None:
 
 
 def main() -> None:
-
     validate_configuration()
 
     print("=" * 80)
@@ -85,7 +97,6 @@ def main() -> None:
     cursor = connection.cursor()
 
     try:
-
         # ---------------------------------------------------------------------
         # 1. Create temporary load table
         # ---------------------------------------------------------------------
@@ -159,7 +170,7 @@ def main() -> None:
         )
         PATTERN = '.*[.]parquet'
         ON_ERROR = 'ABORT_STATEMENT'
-        """
+        """  # nosec B608
 
         cursor.execute(copy_sql)
 
@@ -179,7 +190,7 @@ def main() -> None:
                 COUNT(*) AS row_count,
                 MAX(etl_loaded_at) AS latest_load
             FROM {TEMP_TABLE}
-            """)
+            """)  # nosec B608
 
         row_count, latest_load = cursor.fetchone()
 
@@ -200,7 +211,6 @@ def main() -> None:
         cursor.execute("BEGIN")
 
         try:
-
             cursor.execute(f"""
                 TRUNCATE TABLE {TARGET_TABLE}
                 """)
@@ -257,7 +267,7 @@ def main() -> None:
                     is_weekend,
                     days_to_ship
                 FROM {TEMP_TABLE}
-                """)
+                """)  # nosec B608
 
             cursor.execute("COMMIT")
 
@@ -275,7 +285,7 @@ def main() -> None:
                 COUNT(DISTINCT order_id) AS unique_orders,
                 MAX(etl_loaded_at) AS latest_load
             FROM {TARGET_TABLE}
-            """)
+            """)  # nosec B608
 
         total_orders, unique_orders, latest_load = cursor.fetchone()
 
@@ -292,7 +302,6 @@ def main() -> None:
             raise RuntimeError("RAW.ORDERS contains duplicate order_id values.")
 
     finally:
-
         cursor.close()
         connection.close()
 
