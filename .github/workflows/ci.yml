@@ -56,7 +56,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install pyspark==3.5.1 pytest pytest-cov chispa loguru
+        run: pip install pyspark==3.5.1 pytest pytest-cov chispa loguru python-dotenv
 
       - name: Run Spark unit tests
         run: |
